@@ -34,6 +34,7 @@ Board-specific doc
    lg/index
    mediatek/index
    microchip/index
+   nvidia/index
    nxp/index
    openpiton/index
    phytec/index
