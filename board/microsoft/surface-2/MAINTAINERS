@@ -1,0 +1,8 @@
+SURFACE_2 BOARD
+M:	Jonas Schwöbel <jonasschwoebel@yahoo.de>
+S:	Maintained
+F:	arch/arm/dts/tegra114-microsoft-surface-2.dts
+F:	board/microsoft/surface-2/
+F:	configs/surface-2_defconfig
+F:	doc/board/microsoft/surface-2.rst
+F:	include/configs/surface-2.h
