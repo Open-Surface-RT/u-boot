@@ -240,6 +240,7 @@ config PANEL
 config SIMPLE_PANEL
 	bool "Enable simple panel support"
 	depends on PANEL && BACKLIGHT && DM_GPIO
+	select I2C_EDID
 	default y
 	help
 	  This turns on a simple panel driver that enables a compatible
@@ -1105,6 +1106,7 @@ config SPL_PANEL
 config SPL_SIMPLE_PANEL
 	bool "Enable simple panel support at SPL"
 	depends on SPL_PANEL && SPL_BACKLIGHT && SPL_DM_GPIO
+	select I2C_EDID
 	default y
 	help
 	  This turns on a simple panel driver that enables a compatible
