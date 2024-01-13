@@ -167,6 +167,22 @@
 				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
 			};
 
+			/* UART-A */
+			sdmmc3_cmd {
+				nvidia,pins = "sdmmc3_cmd_pa7";
+				nvidia,function = "uarta";
+				nvidia,pull = <TEGRA_PIN_PULL_DOWN>;
+				nvidia,tristate = <TEGRA_PIN_ENABLE>;
+				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+			};
+			sdmmc3_dat1 {
+				nvidia,pins = "sdmmc3_dat1_pb6";
+				nvidia,function = "uarta";
+				nvidia,pull = <TEGRA_PIN_PULL_NONE>;
+				nvidia,tristate = <TEGRA_PIN_DISABLE>;
+				nvidia,enable-input = <TEGRA_PIN_DISABLE>;
+			};
+
 			/* SDMMC3 pinmux */
 			sdmmc3_clk {
 				nvidia,pins = "sdmmc3_clk_pa6";
@@ -175,11 +191,9 @@
 				nvidia,tristate = <TEGRA_PIN_DISABLE>;
 				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
 			};
-			sdmmc3_cmd {
-				nvidia,pins = "sdmmc3_cmd_pa7",
-						"sdmmc3_dat3_pb4",
+			sdmmc3_dat3 {
+				nvidia,pins = "sdmmc3_dat3_pb4",
 						"sdmmc3_dat2_pb5",
-						"sdmmc3_dat1_pb6",
 						"sdmmc3_dat0_pb7",
 						"sdmmc3_cd_n_pv2",
 						"sdmmc3_clk_lb_in_pee5";
@@ -835,7 +849,7 @@
 	};
 
 	sdmmc3: sdhci@78000400 {
-		status = "okay";
+		status = "disabled";
 		bus-width = <4>;
 
 		cd-gpios = <&gpio TEGRA_GPIO(V, 2) GPIO_ACTIVE_LOW>;
