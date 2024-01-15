@@ -48,6 +48,7 @@ struct tegra_lcd_priv {
 	fdt_addr_t frame_buffer;	/* Address of frame buffer */
 	unsigned pixel_clock;		/* Pixel clock in Hz */
 	int dc_clk[2];			/* Contains clk and its parent */
+	ulong clk_div;			/* Clock divider used by disp_clk_ctrl */
 	bool rotation;			/* 180 degree panel turn */
 	bool pipe;			/* DC controller: 0 for A, 1 for B */
 };
@@ -126,8 +127,6 @@ static int update_display_mode(struct tegra_lcd_priv *priv)
 	struct dc_disp_reg *disp = &priv->dc->disp;
 	struct display_timing *dt = &priv->timing;
 	unsigned long val;
-	unsigned long rate;
-	unsigned long div;
 
 	writel(0x0, &disp->disp_timing_opt);
 
@@ -150,21 +149,11 @@ static int update_display_mode(struct tegra_lcd_priv *priv)
 		writel(val, &disp->disp_interface_ctrl);
 	}
 
-	/*
-	 * The pixel clock divider is in 7.1 format (where the bottom bit
-	 * represents 0.5). Here we calculate the divider needed to get from
-	 * the display clock (typically 600MHz) to the pixel clock. We round
-	 * up or down as requried.
-	 */
-	rate = clock_get_periph_rate(priv->dc_clk[0], priv->dc_clk[1]);
-	div = ((rate * 2 + priv->pixel_clock / 2) / priv->pixel_clock) - 2;
-	debug("Display clock %lu, divider %lu\n", rate, div);
-
 	if (priv->soc->has_rgb)
 		writel(0x00010001, &disp->shift_clk_opt);
 
 	val = PIXEL_CLK_DIVIDER_PCD1 << PIXEL_CLK_DIVIDER_SHIFT;
-	val |= div << SHIFT_CLK_DIVIDER_SHIFT;
+	val |= priv->clk_div << SHIFT_CLK_DIVIDER_SHIFT;
 	writel(val, &disp->disp_clk_ctrl);
 
 	return 0;
@@ -312,6 +301,32 @@ static int tegra_display_probe(struct tegra_lcd_priv *priv,
 	/* PLLD2 obeys same rules as PLLD but it is present only on T30+ */
 	if (priv->dc_clk[1] == CLOCK_ID_DISPLAY2)
 		rate /= 2;
+#endif
+
+	/*
+	 * The pixel clock divider is in 7.1 format (where the bottom bit
+	 * represents 0.5). Here we calculate the divider needed to get from
+	 * the display clock (typically 600MHz) to the pixel clock. We round
+	 * up or down as required.
+	 */
+	priv->clk_div = ((rate * 2 + priv->pixel_clock / 2)
+						/ priv->pixel_clock) - 2;
+	debug("Display clock %lu, divider %lu\n", rate, priv->clk_div);
+
+	/*
+	 * BUG: If DISP1 is a PLLD/D2 child, it cannot go over 370MHz. The
+	 * cause of this is not quite clear. This can be overcomed by
+	 * further halving the DISP1 clock if its parent is PLLD/D2 and
+	 * the target rate is > 400MHz.
+	 */
+	if (priv->dc_clk[1] == CLOCK_ID_DISPLAY)
+		if (rate > 400000)
+			rate /= 2;
+
+#ifndef CONFIG_TEGRA20
+	if (priv->dc_clk[1] == CLOCK_ID_DISPLAY2)
+		if (rate > 400000)
+			rate /= 2;
 #endif
 
 	/*
