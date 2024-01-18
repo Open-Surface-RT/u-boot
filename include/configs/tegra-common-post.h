@@ -40,7 +40,7 @@
 #endif
 
 #define TEGRA_DEVICE_SETTINGS \
-	"stdin=serial" STDIN_KBD_KBC STDIN_KBD_USB STDOUT_CROS_EC STDIN_BTN_KBD "\0" \
+	"stdin=serial" STDIN_KBD_KBC STDIN_KBD_USB STDOUT_CROS_EC STDIN_BTN_KBD",hid-over-i2c" "\0" \
 	"stdout=serial" STDOUT_VIDEO "\0" \
 	"stderr=serial" STDOUT_VIDEO "\0" \
 	""

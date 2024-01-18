@@ -778,6 +778,18 @@
 		status = "okay";
 	};
 
+	i2c@7000c000 {
+		status = "okay";
+		clock-frequency = <400000>;
+		
+		tCover@0 {
+			compatible = "hid-over-i2c";
+			reg = <0x00>;
+			hid-descr-addr = <0x0041>;
+			irq = <TEGRA_GPIO(C, 7) GPIO_ACTIVE_LOW>;
+		};
+	};
+
 	pwr_i2c: i2c@7000d000 {
 		status = "okay";
 		clock-frequency = <400000>;
