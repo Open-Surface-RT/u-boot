@@ -13,7 +13,7 @@
 	};
 
 	aliases {
-		i2c0 = &pwr_i2c;
+		i2c1 = &pwr_i2c;
 
 		mmc0 = &sdmmc4; /* eMMC */
 		mmc1 = &sdmmc1; /* uSD slot */
@@ -871,6 +871,25 @@
 		status = "okay";
 	};
 
+       i2c@7000c000 {
+               status = "okay";
+               clock-frequency = <400000>;
+
+               cover@0  {
+                       compatible = "hid-over-i2c";
+                       reg = <0x00>;
+
+                       hid-descr-addr = <0x0041>;
+                       irq = <&gpio TEGRA_GPIO(O, 5) GPIO_ACTIVE_HIGH>;
+                       detect = <&gpio TEGRA_GPIO(S,0) GPIO_ACTIVE_HIGH>;
+
+                       vdd-supply = <&ldo3_reg>;
+			vddio-supply = <&ldo1_reg>;
+               };
+
+       };
+
+
 	pwr_i2c: i2c@7000d000 {
 		status = "okay";
 		clock-frequency = <400000>;
@@ -898,9 +917,25 @@
 					regulator-boot-on;
 				};
 
+				ldo1_reg: ldo1 {
+					regulator-name = "tCoverAndSensorCollection";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+					regulator-boot-on;
+				};
+
+				ldo3_reg: ldo3 {
+					regulator-name = "tCoverPower";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <2800000>;
+					regulator-always-on;
+					regulator-boot-on;
+				};
+
 				vddio_usd: ldo5 {
 					regulator-name = "vddio_usd";
-					regulator-min-microvolt = <3300000>;
+					regulator-min-microvolt = <1800000>;
 					regulator-max-microvolt = <3300000>;
 					regulator-always-on;
 					regulator-boot-on;
@@ -921,7 +956,7 @@
 	};
 
 	sdmmc1: sdhci@78000000 {
-		status = "okay";
+		status = "disabled";
 		bus-width = <4>;
 
 		cd-gpios = <&gpio TEGRA_GPIO(I, 5) GPIO_ACTIVE_LOW>;
