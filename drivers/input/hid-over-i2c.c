@@ -185,8 +185,6 @@ static int get_input_report(struct udevice *dev) {
 	struct hid_descriptor *hid_descriptor = &priv->hid_descriptor;
 	struct dm_i2c_chip *chip = dev_get_parent_plat(dev);
 	struct i2c_msg i2c_msgs[2];
-	uint8_t buffer[40] = {0};
-	uint16_t read_len;
 	int ret;
 
 	//printf("Get Input report\n");
@@ -253,24 +251,46 @@ static int keys_check(struct input_config *input)
 
 	// decode input report
 #define RSVRD 0
-	int map[] = {
-RSVRD, RSVRD, RSVRD, RSVRD, KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I, KEY_J, KEY_K, KEY_L,
-KEY_M, KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z, KEY_1, KEY_2,
-KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0, KEY_ENTER, KEY_ESC, KEY_BACKSPACE, KEY_TAB, KEY_SPACE
+	int map[145] = {
+RSVRD, RSVRD, RSVRD, RSVRD, KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F,
+KEY_G, KEY_H, KEY_I, KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P,
+KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z,
+KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0,
+KEY_ENTER, KEY_ESC, KEY_BACKSPACE, KEY_TAB, KEY_SPACE, KEY_MINUS, KEY_EQUAL, KEY_LEFTBRACE, KEY_RIGHTBRACE, KEY_BACKSLASH,
+RSVRD, KEY_SEMICOLON, KEY_APOSTROPHE, KEY_GRAVE, KEY_COMMA, KEY_DOT, KEY_SLASH, KEY_CAPSLOCK, KEY_F1,
+KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10, KEY_F11,
+KEY_F12, RSVRD, RSVRD, RSVRD, RSVRD, KEY_HOME, KEY_PAGEUP, KEY_DELETE, KEY_END,
+KEY_PAGEDOWN, KEY_RIGHT, KEY_LEFT, KEY_DOWN, KEY_UP, RSVRD
+// Finish me, mostly RSRVD needed
 	};
 	
-	int keycode[5];
-	int count = 0;
-	for (int i = 0; i < 5; i++) {
-		keycode[i] = map[in_rep->data[i+1]];
-		if (keycode[i] != 0) {
-			count++;
+	int mod_map[] = {
+		KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_LEFTALT, KEY_LEFTMETA, KEY_RIGHTCTRL, KEY_RIGHTSHIFT, KEY_RIGHTALT, KEY_RIGHTMETA
+	};
+	
+	int keycode[18];
+	int keycode_count = 0;
+	
+	uint8_t modifier = in_rep->data[0];
+	for (int i = 0; i < 8; i++) {
+		if (modifier & 1) {
+			keycode[keycode_count++] = mod_map[i];
 		}
-		//printf("%d\n", keycode[i]);
+		modifier >>= 1;
 	}
-	//printf("count: %d\n", count);
+	
+	for (int i = 0; i < 10; i++) {
+		int key = map[in_rep->data[i+1]]; // +1 to skip modifier byte
+		if (key != 0) {
+			keycode[keycode_count++] = key;
+
+		} else if (in_rep->data[i+1] != 0) {
+			printf("\"unhandled key: >%#02x<\"", in_rep->data[i+1]);
+		}
+
+	}
 	// write to stdin
-	input_send_keycodes(input, keycode, count);
+	input_send_keycodes(input, keycode, keycode_count);
 
 	return 0;
 }
@@ -374,7 +394,7 @@ static int hid_over_i2c_probe(struct udevice *dev)
 
 	// Configure Input.
 	input_set_delays(input, 240, 30);
-	input_allow_repeats(input, true);
+	input_allow_repeats(input, false);
 	input_add_tables(input, false);
 
 	priv->input = input;
