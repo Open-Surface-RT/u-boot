@@ -100,3 +100,8 @@ config TWL4030_INPUT
 	bool "Enable TWL4030 Input controller"
 	help
 	  Enable TWL4030 Input controller
+
+config HID_OVER_I2C
+	bool "Enable HID over I2C driver"
+	help
+	  What did you expect? No help yet.

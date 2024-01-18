@@ -7,6 +7,8 @@ obj-$(CONFIG_$(SPL_TPL_)CROS_EC_KEYB) += cros_ec_keyb.o
 obj-$(CONFIG_$(SPL_TPL_)OF_CONTROL) += key_matrix.o
 obj-$(CONFIG_$(SPL_TPL_)DM_KEYBOARD) += input.o keyboard-uclass.o
 obj-$(CONFIG_BUTTON_KEYBOARD) += button_kbd.o
+obj-$(CONFIG_HID_OVER_I2C) += hid-over-i2c.o
+obj-$(CONFIG_HID_OVER_I2C) += hid.o
 
 ifndef CONFIG_SPL_BUILD
 
