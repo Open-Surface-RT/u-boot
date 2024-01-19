@@ -339,6 +339,7 @@ static inline void _debug_uart_init(void)
 	 * feasible. The better fix is to move all users of this driver to
 	 * driver model.
 	 */
+#ifndef CONFIG_DEBUG_UART_SKIP_INIT
 	baud_divisor = ns16550_calc_divisor(com_port, CONFIG_DEBUG_UART_CLOCK,
 					    CONFIG_BAUDRATE);
 	serial_dout(&com_port->ier, CFG_SYS_NS16550_IER);
@@ -349,6 +350,7 @@ static inline void _debug_uart_init(void)
 	serial_dout(&com_port->dll, baud_divisor & 0xff);
 	serial_dout(&com_port->dlm, (baud_divisor >> 8) & 0xff);
 	serial_dout(&com_port->lcr, UART_LCRVAL);
+#endif
 }
 
 static inline int NS16550_read_baud_divisor(struct ns16550 *com_port)
