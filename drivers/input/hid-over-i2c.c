@@ -51,11 +51,8 @@ struct hid_over_i2c_priv {
 	uint8_t* input_report;
 	uint8_t* report_descriptor;
 
-
 	struct udevice *vdd_supply;	/* Main voltage regulator (Vcc)*/
 	struct udevice *vddio_supply;	/* IO voltage regulator (Vccq)*/
-
-
 
 	struct hid_descriptor hid_descriptor;
 };
@@ -187,8 +184,6 @@ static int get_input_report(struct udevice *dev) {
 	struct i2c_msg i2c_msgs[2];
 	int ret;
 
-	//printf("Get Input report\n");
-
 	i2c_msgs[0].addr = chip->chip_addr;
 	i2c_msgs[0].flags = I2C_M_RD;
 	i2c_msgs[0].len = hid_descriptor->wMaxInputLength;
@@ -203,55 +198,20 @@ static int get_input_report(struct udevice *dev) {
 
 	// Ignore touchpad report for now.
 	// Only accept keyboard reportID
+	// TODO fix this hack
 	if (in_rep->report_id != 1) {
 		return -ENODATA;
 	}
 
-	/*
-	printf("size: %d, id: %d\n", in_rep->length, in_rep->report_id);
-	printf("Input Report data:\n");
-	
-	for (int i = 0; i < in_rep->length; i++) {
-		if (i % 16 == 0 && i != 0) {
-			printf("\n");
-		}
-		printf("%02x ", in_rep->data[i]);
-	}
-	printf("\n");
-	*/
-
 	return 0;
 }
 
-static int keys_check(struct input_config *input)
-{
-	struct hid_over_i2c_priv *priv = dev_get_priv(input->dev);
-//	struct hid_descriptor *hid_descriptor = &priv->hid_descriptor;
-	int ret;
-	
-	// Check if interrupt is asserted
-	ret  = dm_gpio_get_value(&priv->irq_gpio);
-	if (ret < 0) { // error
-		return ret;
-	}
-
-	if (ret == 1) { // No interrupt asserted and thus no data available.
-		return -1;
-	}
-
-	//printf("hid: time to fetch an input report\n");
+static int decode_keys(struct input_report *in_rep, int *keycodes, int *keycode_count) {
+	*keycode_count = 0;
 
 
-	// fetch input report
-	ret = get_input_report(input->dev);
-	if (ret)
-		return ret;
-
-	struct input_report *in_rep = (struct input_report*)priv->input_report;
-
-	// decode input report
 #define RSVRD 0
-	int map[145] = {
+	const int map[145] = {
 RSVRD, RSVRD, RSVRD, RSVRD, KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F,
 KEY_G, KEY_H, KEY_I, KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P,
 KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z,
@@ -264,48 +224,64 @@ KEY_PAGEDOWN, KEY_RIGHT, KEY_LEFT, KEY_DOWN, KEY_UP, RSVRD
 // Finish me, mostly RSRVD needed
 	};
 	
-	int mod_map[] = {
+	const int mod_map[8] = {
 		KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_LEFTALT, KEY_LEFTMETA, KEY_RIGHTCTRL, KEY_RIGHTSHIFT, KEY_RIGHTALT, KEY_RIGHTMETA
 	};
 	
-	int keycode[18];
-	int keycode_count = 0;
-	
+
+	// Decode Modifiers
 	uint8_t modifier = in_rep->data[0];
 	for (int i = 0; i < 8; i++) {
 		if (modifier & 1) {
-			keycode[keycode_count++] = mod_map[i];
+			keycodes[(*keycode_count)++] = mod_map[i];
 		}
 		modifier >>= 1;
 	}
 	
+	// Decode Keys
 	for (int i = 0; i < 10; i++) {
 		int key = map[in_rep->data[i+1]]; // +1 to skip modifier byte
 		if (key != 0) {
-			keycode[keycode_count++] = key;
+			keycodes[(*keycode_count)++] = key;
 
 		} else if (in_rep->data[i+1] != 0) {
 			printf("\"unhandled key: >%#02x<\"", in_rep->data[i+1]);
 		}
 
 	}
-	// write to stdin
-	input_send_keycodes(input, keycode, keycode_count);
 
 	return 0;
 }
 
-static int hid_over_i2c_probe(struct udevice *dev)
-{
-	struct hid_over_i2c_priv *priv = dev_get_priv(dev);
-	struct keyboard_priv *uc_priv = dev_get_uclass_priv(dev);
-	struct stdio_dev *sdev = &uc_priv->sdev;
-	struct input_config *input = &uc_priv->input;
+#define EDGE_NONE 0
+#define EDGE_RISING 1
+#define EDGE_FALLING 2
+
+static int poll_detect_edge(struct udevice *dev) {
+	static int old_state = 0;
 	int ret;
 	
-	ret = gpio_request_by_name(dev, "detect", 0, &priv->detect_gpio, GPIOD_IS_IN);
-	printf("gpio_request: %d\n", ret);
+	struct hid_over_i2c_priv *priv = dev_get_priv(dev);
+
+	ret = dm_gpio_get_value(&priv->detect_gpio);
+	if (ret < 0)
+		return ret;
 	
+	if (old_state == 0 && ret == 1) {
+		old_state = ret;
+		return EDGE_RISING;
+	} else if (old_state == 1 && ret == 0) {
+		old_state = ret;
+		return EDGE_FALLING;
+	}
+
+	return 0;
+}
+
+static int init_device(struct udevice *dev) {
+	struct hid_over_i2c_priv *priv = dev_get_priv(dev);
+	int ret;
+
 	while (1) {
 		ret = dm_gpio_get_value(&priv->detect_gpio);
 		printf("gpio_value: %d\n", ret);
@@ -313,66 +289,18 @@ static int hid_over_i2c_probe(struct udevice *dev)
 			break;
 	}
 	
-	
-	ret = device_get_supply_regulator(dev, "vdd-supply",&priv->vdd_supply);
-	if (ret) {
-		printf("vdd not found\n");
-	} else {
-		printf("vdd found\n");
-	}
-	
-	ret = device_get_supply_regulator(dev, "vddio-supply",&priv->vddio_supply);
-	if (ret) {
-		printf("vddio not found\n");
-	} else {
-		printf("vddio found\n");
-	}
-	
-	if (priv->vddio_supply) {
-		printf("enable vddio\n");
-		int ret = regulator_set_enable_if_allowed(priv->vddio_supply,true);
-
-		if (ret) {
-			printf("Error vddio supply : %d\n", ret);
-			return ret;
-		}
-	}
-
-	mdelay(50);
-	
-	if (priv->vdd_supply) {
-		printf("enable vdd\n");
-		int ret = regulator_set_enable_if_allowed(priv->vdd_supply,true);
-
-		if (ret) {
-			printf("Error vdd supply : %d\n", ret);
-			return ret;
-		}
-	}
-	mdelay(100);
-	
-	
-	
-	
-	
-	
-
-	int gpio_ret;
-	
-	ret = ~0;
-	while(ret) {
-		gpio_ret = dm_gpio_get_value(&priv->detect_gpio);
-		printf("gpio_detect: %d\n", gpio_ret);
-		ret = get_hid_descriptor(dev, &priv->hid_descriptor);
-		printf("hid: %d\n", ret);
-		print_hid_descriptor(&priv->hid_descriptor); // TODO debug only
-	}
-	
-	if (ret)
-		return ret;
+	ret = get_hid_descriptor(dev, &priv->hid_descriptor);
+	printf("hid: %d\n", ret);
+	print_hid_descriptor(&priv->hid_descriptor); // TODO debug only
 
 	// Alloc memory for reports
 	priv->report_descriptor = devm_kzalloc(dev, priv->hid_descriptor.wReportDescLength, 0);
+	if (priv->report_descriptor == NULL) {
+		printf("Memory was NOT allocated!\n");
+	} else {
+		printf("Allocated memory at %p\n", priv->report_descriptor);
+	}
+
 	priv->input_report = devm_kzalloc(dev, priv->hid_descriptor.wMaxInputLength, 0);
 	if (priv->input_report == NULL) {
 		printf("Memory was NOT allocated!\n");
@@ -386,16 +314,128 @@ static int hid_over_i2c_probe(struct udevice *dev)
 	print_report_descriptor(priv->report_descriptor);
 	//parse_report_descriptor();
 
-	// Request GPIO
-	gpio_request_by_name(dev, "irq", 0, &priv->irq_gpio, GPIOD_IS_IN);
-	
+	return 0;
+}
 
+static int keys_check(struct input_config *input)
+{
+	struct hid_over_i2c_priv *priv = dev_get_priv(input->dev);
+//	struct hid_descriptor *hid_descriptor = &priv->hid_descriptor;
+	int ret;
+
+	// Check rising / falling edge to un/register device (hid descriptor, report descriptor, alloc memory, ...)
+	ret = poll_detect_edge(input->dev);
+	if (ret == EDGE_RISING) {
+		printf("rising edge\n");
+		// register new device
+		init_device(input->dev);
+	} else if (ret == EDGE_FALLING) {
+		printf("falling edge\n");
+		// unregister old device
+	}
 	
+	// Check if tCover is connected
+	ret = dm_gpio_get_value(&priv->detect_gpio);
+	if (ret < 0)
+		return ret;
+	// tCover not connected
+	if (ret == 0) {
+		return -ENODEV;
+	}
+
+	// Check if interrupt is asserted
+	ret  = dm_gpio_get_value(&priv->irq_gpio);
+	if (ret < 0) { // error
+		return ret;
+	}
+	if (ret == 0) { // No interrupt asserted and thus no data available.
+		return -ENODATA;
+	}
+
+	// Fetch input report
+	ret = get_input_report(input->dev);
+	if (ret)
+		return ret;
+
+	// decode keys
+	int keycodes[18] = {0}; // TODO does this have to be static? Pointer is passed to input_send_keycodes or does it survive on the stack?
+	int keycode_count = 0;
+	decode_keys((struct input_report*)priv->input_report, keycodes, &keycode_count);
+
+	// TODO handle key repeat
+	// Create array/list which holds currently pressed keys.
+	// Input layer will poll after x ms again.
+	// Interrupt is asserted. Return list of pressed keys again
+	// If interrupt is asserted remove keys from list that aren't pressed anymore.
+
+	// write to stdin
+	ret = input_send_keycodes(input, keycodes, keycode_count);
+
+	// return number of keys reported
+	return ret;
+}
+
+static int hid_over_i2c_probe(struct udevice *dev)
+{
+	struct hid_over_i2c_priv *priv = dev_get_priv(dev);
+	struct keyboard_priv *uc_priv = dev_get_uclass_priv(dev);
+	struct stdio_dev *sdev = &uc_priv->sdev;
+	struct input_config *input = &uc_priv->input;
+	int ret;
+
+	// Request global resources
+	ret = gpio_request_by_name(dev, "detect", 0, &priv->detect_gpio, GPIOD_IS_IN);
+	if (ret)
+		return ret;
+
+	ret = gpio_request_by_name(dev, "irq", 0, &priv->irq_gpio, GPIOD_IS_IN);
+	if (ret)
+		return ret;
+
+// Doesn't seem to work. I still need always-on and boot-on in devicetree
+/*
+	ret = device_get_supply_regulator(dev, "vdd-supply",&priv->vdd_supply);
+	if (ret) {
+		printf("vdd not found\n");
+	} else {
+		printf("vdd found\n");
+	}
+	
+	ret = device_get_supply_regulator(dev, "vddio-supply",&priv->vddio_supply);
+	if (ret) {
+		printf("vddio not found\n");
+	} else {
+		printf("vddio found\n");
+	}
+
+	if (priv->vdd_supply) {
+		printf("enable vdd\n");
+		int ret = regulator_set_enable(priv->vdd_supply,true);
+
+		if (ret) {
+			printf("Error vdd supply : %d\n", ret);
+			return ret;
+		}
+	}
+	mdelay(50);
+
+	if (priv->vddio_supply) {
+		printf("enable vddio\n");
+		int ret = regulator_set_enable(priv->vddio_supply,true);
+
+		if (ret) {
+			printf("Error vddio supply : %d\n", ret);
+			return ret;
+		}
+	}
+
+	mdelay(50);
+*/
 
 	// Configure Input.
 	input_set_delays(input, 240, 30);
 	input_allow_repeats(input, false);
-	input_add_tables(input, false);
+	input_add_tables(input, true); // TODO german layout :)
 
 	priv->input = input;
 	input->dev = dev;
@@ -412,6 +452,11 @@ static int hid_over_i2c_probe(struct udevice *dev)
 }
 
 static const struct keyboard_ops hid_over_i2c_ops = {
+	.start = NULL, // Add power stuff, if possible
+	.stop = NULL, // Remove power stuff
+	.tstc = NULL, // ignore as input layer handles this
+	.getc = NULL, // ignore as input layer handles this
+	.update_leds = NULL, // figure out output reports
 };
 
 static const struct udevice_id hid_over_i2c_ids[] = {

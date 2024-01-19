@@ -880,7 +880,7 @@
                        reg = <0x00>;
 
                        hid-descr-addr = <0x0041>;
-                       irq = <&gpio TEGRA_GPIO(O, 5) GPIO_ACTIVE_HIGH>;
+                       irq = <&gpio TEGRA_GPIO(O, 5) GPIO_ACTIVE_LOW>;
                        detect = <&gpio TEGRA_GPIO(S,0) GPIO_ACTIVE_HIGH>;
 
                        vdd-supply = <&ldo3_reg>;
